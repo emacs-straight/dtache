@@ -1,0 +1,34 @@
+#+title: dtache.el - Changelog
+#+author: Niklas Eklund
+#+language: en
+
+* Development
+
+- =dtache= now has full on macOS. The previous issue of not being able to utilize =filenotify= has been resolved.
+- =dtache= now uses =notifications= library to issue notifications by default.
+- =dtache= now uses =filenotify= for notifications except on local macOS hosts.
+
+* Version 0.3 (2022-01-15)
+
+- =dtache= now uses =filenotify= for both local and remote sessions. If run on =macOS= timers are used both for local as well as remote sessions.
+- Add version for =dtache-session= objects. This makes dtache not break whenever non-backwards compatible changes are made to the dtache-session object.
+- The commands for launching sessions are now renamed to resemble the non dtache commands. The commands are =dtache-shell-command=, =dtache-shell-send-input=, =dtache-eshell-send-input=, =dtache-compile=.
+- Add action value to a session. This value is set to dtache-session-action which is a property list optionally specifying attach, view and run properties. These properties are then used in dwim commands to improve their functionality.
+- Add a generic detach command, =dtache-detach-dwim=. This command is supposed to be used to detach from sessions in all supported modes.
+- Add =dtache-compile.el=. This library provides commands =dtache-compile= and =dtache-compile-recompile= which are supposed to be used instead of =compile=/=recompile=.
+- Improve =dtache-shell-command=, the command is now very similar to =async-shell-command= and can be considered a replacement of the latter.
+- Add integration with the =consult= package through =dtache-consult.el=.
+- Add support for =eshell= through the =dtache-eshell= package.
+- macOS (monitor) support is added to the package.
+
+* Version 0.2 (2021-12-23)
+
+- With the recent improvements to =dtache-open-session=, the package is ready to harmonize the user interface. This means deprecating =dtache-list-sessions=.
+- Remove external dependency to =embark=. The package now implements an action map that can be used with/without embark.
+- Remove external dependency to =marginalia=. The package now provides annotations for all users.
+- Fix error in =dtache-env= usage. The integration wasn't correct which resulted in =dtache= failing to execute some commands properly
+- Make =dtache-env= optional rather than required. =Dtache= should be fine without it, just that automatic status labeling will not be run
+
+* Version 0.1 (2021-12-15)
+
+- Initial release
