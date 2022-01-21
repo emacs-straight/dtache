@@ -1,6 +1,6 @@
 ;;; dtache-eshell.el --- Dtache integration for eshell -*- lexical-binding: t -*-
 
-;; Copyright (C) 2021-2022 Niklas Eklund
+;; Copyright (C) 2021-2022  Free Software Foundation, Inc.
 
 ;; This file is not part of GNU Emacs.
 
@@ -51,11 +51,11 @@
 
 (defun dtache-eshell-select-session ()
   "Return selected session."
-  (let* ((current-host (dtache--host))
+  (let* ((host-name (plist-get (dtache--host) :name))
          (sessions
           (thread-last (dtache-get-sessions)
                        (seq-filter (lambda (it)
-                                     (string= (dtache--session-host it) current-host)))
+                                     (string= (plist-get (dtache--session-host it) :name) host-name)))
                        (seq-filter #'dtache--determine-session-state))))
     (dtache-completing-read sessions)))
 
