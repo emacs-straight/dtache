@@ -2,12 +2,16 @@
 #+author: Niklas Eklund
 #+language: en
 
+#+html: <a href="http://elpa.gnu.org/devel/dtache.html"><img alt="GNU-devel ELPA" src="https://elpa.gnu.org/devel/dtache.svg"/></a>
+
 * Introduction
   :properties:
   :description: Why Dtache?
   :end:
 
-=Dtache=, or =Detach Emacs=, is a package to run shell commands completely detached from Emacs. With shell commands, we refer to commands that otherwise would be run in a terminal. This is made possible through the program [[https://github.com/crigler/dtach][dtach]], which =dtache= derives its name from. The package enables a seamless integration where commands are run using decoupled =dtach= processes, which =dtache= makes sure behind the scenes, that Emacs can attach to. The commands are therefore detached as soon as they are started. This makes it possible for commands to outlive Emacs, which also works on remote hosts, essentially offering a lightweight alternative to [[https://github.com/tmux/tmux][Tmux]] or [[https://www.gnu.org/software/screen/][GNU Screen]].
+=Dtache=, or =Detach Emacs=, is a package to run shell commands completely detached from Emacs itself. The package achieves this functionality by launching the commands with the program [[https://github.com/crigler/dtach][dtach]]. Even though the commands are run decoupled, the package makes sure the integration to Emacs is seamless. The advantage is that the processes are insensitive to Emacs being killed, and this holds true for remote hosts as well, essentially making =dtache= a lightweight alternative to [[https://github.com/tmux/tmux][Tmux]] or [[https://www.gnu.org/software/screen/][GNU Screen]].
+
+Another advantage of =dtache= is that in order to implement the detached feature it actually represents the processes as text inside of Emacs. This enables features such as history of all session outputs, possibility to diff session outputs etc.
 
 The following videos about =dtache=. They are currently a bit outdated but the core concept is still true.
 - [[https://www.youtube.com/watch?v=if1W58SrClk][Dtache - An Emacs package that provides detachable shell commands]]
@@ -19,7 +23,7 @@ The way =dtache= is designed with its =dtache-session= objects opens up the poss
 
 *** Output
 
-The user always have access to the session's output. The user never needs to fear that the output history of the terminal is not enough to capture all of its output. Also its pretty handy to be able to go back in time and see the output from a session you ran earlier today. Also having access to the output as well as the other information from the session makes it possible to enable =compilation-minor-mode= in order to use Emacs built in capabilities to perform a post compilation. This enables navigation between errors in the output as well as proper syntax highlighting. This is something =dtache= will do automatically if it detects that you are opening the output of a session with status =failure=.
+The user always have access to the session's output. The user never needs to fear that the output history of the terminal is not enough to capture all of its output. Also its pretty handy to be able to go back in time and see the output from a session you ran earlier today. Having access to the output as well as the other information from the session makes it possible to compile a session using Emacs built in functionality. This enables navigation between errors in the output as well as proper syntax highlighting. This is something =dtache= will do automatically if it detects that you are opening the output of a session with status =failure=.
 
 *** Notifications
 
@@ -31,7 +35,7 @@ The session always contain metadata, such as when the session was started, for h
 
 *** Annotations
 
-Arbitrarily metadata can be captured when a session is started through the =dtache-metadata-annotators-alist=
+Arbitrary metadata can be captured when a session is started. An example further down is how to leverage this feature to capture the git branch for a session.
 
 *** Remote
 
@@ -41,16 +45,16 @@ Proper support for running session on a remote host.
 
 The package provides commands that can act on a session. There is the functionality to =kill= an active session, to =rerun= a session, or =diff= two sessions.
 
-*** Persistency
+*** Persistent
 
 The sessions are made persistent by writing the =dtache-session= objects to file. This makes it possible for Emacs to resume the knowledge of prior sessions when Emacs is restarted.
 
 
 * Installation
 
-There exists a [[https://guix.gnu.org/en/packages/emacs-dtache-0.3-0.9e0acd5/][guix package]] of =dtache= which users of the [[https://guix.gnu.org/][GNU Guix package manager]] can install.
+The package is available on [[https://elpa.gnu.org/packages/dtache][GNU ELPA]] and [[https://elpa.gnu.org/devel/dtache.html][GNU-devel ELPA]].
 
-For the time being =dtache= is not available in any of the Emacs repositories and must therefore be installed from souce.
+For users of the [[https://guix.gnu.org/][GNU Guix package manager]] there is a [[https://guix.gnu.org/en/packages/emacs-dtache-0.3-0.9e0acd5/][guix package]].
 
 * Configuration
 
@@ -63,9 +67,7 @@ A minimal configuration for =dtache=.
 #+begin_src elisp :lexical t :results none
   (use-package dtache
     :hook (after-init . dtache-setup)
-    :bind (([remap async-shell-command] . dtache-shell-command)
-           :map dtache-shell-mode-map
-           ("C-c C-q" . dtache-detach-session)))
+    :bind (([remap async-shell-command] . dtache-shell-command)))
 #+end_src
 
 * Commands
@@ -83,7 +85,7 @@ There are tree different ways to create a dtache session.
 
 The =dtache-shell-command= is for the Emacs users that are accustomed to running shell commands from =M-x shell-command= or =M-x async-shell-command=. The =dtache-shell-send-input= is for those that want to run a command through =dtache= when inside a =shell= buffer. The =dtache-eshell-send-input= is the equivalent for =eshell=. The =dtache-compile= is supposed to be used as a replacement for =compile=. Last there is the =dtache-start-session= function, which users can utilize in their own custom commands.
 
-To detach from a =dtache= session you should use the univeral =dtache-detach-dwim= command.
+To detach from a =dtache= session you should use the universal =dtache-detach-session= command. The keybinding for this command is defined by the =dtache-detach-key= variable, which by default has the value =C-c C-d=.
 
 ** Interacting with a session
 
@@ -125,21 +127,19 @@ A =use-package= configuration of the =dtache-shell= extension, which provides th
 
 #+begin_src elisp :lexical t :results none
   (use-package dtache-shell
-    :hook (after-init . dtache-shell-setup)
-    :bind (:map dtache-shell-mode-map
-           (("<S-return>" . dtache-shell-send-input)
-            ("<C-return>" . dtache-shell-attach-session)))
+    :after dtache
     :config
+    (dtache-shell-setup)
     (setq dtache-shell-history-file "~/.bash_history"))
 #+end_src
 
 A minor mode named =dtache-shell-mode= is provided, and will be enabled in =shell=. The commands that are implemented are:
 
-| Command                     | Description                  |
-|-----------------------------+------------------------------|
-| dtache-shell-send-input     | Run command with dtache      |
-| dtache-shell-attach-session | Attach to a dtache session   |
-| dtache-detach-session       | Detach from a dtache session |
+| Command                     | Description                  | Keybinding        |
+|-----------------------------+------------------------------+-------------------|
+| dtache-shell-send-input     | Run command with dtache      | <S-return>        |
+| dtache-shell-attach-session | Attach to a dtache session   | <C-return>        |
+| dtache-detach-session       | Detach from a dtache session | dtache-detach-key |
 
 ** Dtache-eshell
 
@@ -147,20 +147,16 @@ A =use-package= configuration of the =dtache-eshell= extension, which provides t
 
 #+begin_src elisp :lexical t :results none
   (use-package dtache-eshell
-    :hook (after-init . dtache-eshell-setup)
-    :bind (:map dtache-eshell-mode-map
-           (("<S-return>" . dtache-eshell-send-input)
-            ("<C-return>" . dtache-eshell-attach-session)
-            ("C-c C-q" . dtache-detach-session))))
+    :hook (eshell-mode . dtache-eshell-mode))
 #+end_src
 
 A minor mode named =dtache-eshell-mode= is provided, and will be enabled in =eshell=. The commands that are implemented are:
 
-| Command                      | Description                  |
-|------------------------------+------------------------------|
-| dtache-eshell-send-input     | Run command with dtache      |
-| dtache-eshell-attach-session | Attach to a dtache session   |
-| dtache-detach-session        | Detach from a dtache session |
+| Command                      | Description                  | Keybinding        |
+|------------------------------+------------------------------+-------------------|
+| dtache-eshell-send-input     | Run command with dtache      | <S-return>        |
+| dtache-eshell-attach-session | Attach to a dtache session   | <C-return>        |
+| dtache-detach-session        | Detach from a dtache session | dtache-detach-key |
 
 In this [[https://niklaseklund.gitlab.io/blog/posts/dtache_eshell/][blog post]] there are examples and more information about the extension.
 
@@ -172,9 +168,7 @@ A =use-package= configuration of the =dtache-compile= extension, which provides 
   (use-package dtache-compile
     :hook (after-init . dtache-compile-setup)
     :bind (([remap compile] . dtache-compile)
-           ([remap recompile] . dtache-compile-recompile)
-           :map dtache-compilation-mode-map
-           ("C-c C-q" . dtache-detach-session)))
+           ([remap recompile] . dtache-compile-recompile)))
 #+end_src
 
 The package implements the commands =dtache-compile= and =dtache-compile-recompile=, which are thin wrappers around the original =compile= and =recompile= commands. The users should be able to use the former as replacements for the latter without noticing any difference except from the possibility to =detach=.
@@ -220,8 +214,8 @@ By default =dtache= uses the built in =notifications= library to issue a notific
 #+begin_src elisp :lexical t :results none
   (defun my/dtache-state-transition-alert-notification (session)
     "Send an `alert' notification when SESSION becomes inactive."
-    (let ((status (dtache--session-status session))
-          (host (plist-get (dtache--session-host session) :name)))
+    (let ((status (car (dtache--session-status session)))
+          (host (car (dtache--session-host session))))
       (alert (dtache--session-command session)
        :title (pcase status
                 ('success (format "Dtache finished [%s]" host))
@@ -251,6 +245,7 @@ The package provides the following customizable variables.
 | dtache-tail-interval          | How often =dtache= should refresh the output when tailing    |
 | dtache-nonattachable-commands | A list of commands that should be considered nonattachable   |
 | dtache-notification-function  | Specifies which function to issue notifications with         |
+| dtache-detach-key             | Specifies which keybinding to use to detach from a session   |
 
 Apart from those variables there is also the different =action= variables, which can be configured differently depending on the origin of the session.
 
@@ -340,9 +335,13 @@ The =dtache= package supports [[https://www.gnu.org/software/emacs/manual/html_n
 
 Information about larger changes that has been made between versions can be found in the =CHANGELOG.org=
 
+* Support
+
+The =dtache= package should work on =Linux= and =macOS=. It is regularly tested on =Ubuntu= and =GNU Guix System=.
+
 * Contributions
 
-I have signed the papers for a [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Copyright-Assignment.html][copyright assignment]] in order to contribute the package to [[https://elpa.gnu.org/][ELPA]]. This means that other contributors needs to have their copyright assigned as well.
+The package is part of [[https://elpa.gnu.org/][ELPA]] which means that if you want to contribute you must have a [[https://www.gnu.org/software/emacs/manual/html_node/emacs/Copyright-Assignment.html][copyright assignment]].
 
 * Credits
 

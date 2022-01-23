@@ -33,7 +33,7 @@
 ;;;; Variables
 
 (defcustom dtache-eshell-session-action
-  '(:attach dtache-tail-session
+  '(:attach dtache-shell-command-attach-session
             :view dtache-view-dwim
             :run dtache-shell-command)
   "Actions for a session created with `dtache-eshell'."
@@ -42,20 +42,13 @@
 
 ;;;; Functions
 
-;;;###autoload
-(defun dtache-eshell-setup ()
-  "Setup `dtache-eshell'."
-  (dtache-setup)
-  (add-hook 'eshell-prepare-command-hook #'dtache-eshell--maybe-create-session)
-  (add-hook 'eshell-mode-hook #'dtache-eshell-mode))
-
 (defun dtache-eshell-select-session ()
   "Return selected session."
-  (let* ((host-name (plist-get (dtache--host) :name))
+  (let* ((host-name (car (dtache--host)))
          (sessions
           (thread-last (dtache-get-sessions)
                        (seq-filter (lambda (it)
-                                     (string= (plist-get (dtache--session-host it) :name) host-name)))
+                                     (string= (car (dtache--session-host it)) host-name)))
                        (seq-filter #'dtache--determine-session-state))))
     (dtache-completing-read sessions)))
 
@@ -121,6 +114,14 @@ If prefix-argument directly DETACH from the session."
 
 ;;;; Minor mode
 
+(defvar dtache-eshell-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "<S-return>") #'dtache-eshell-send-input)
+    (define-key map (kbd "<C-return>") #'dtache-eshell-attach-session)
+    (define-key map (kbd dtache-detach-key) #'dtache-detach-session)
+    map)
+  "Keymap for `dtache-eshell-mode'.")
+
 ;;;###autoload
 (define-minor-mode dtache-eshell-mode
   "Integrate `dtache' in `eshell-mode'."
@@ -130,8 +131,11 @@ If prefix-argument directly DETACH from the session."
   (make-local-variable 'eshell-preoutput-filter-functions)
   (if dtache-eshell-mode
       (progn
+        (dtache-setup)
+        (add-hook 'eshell-prepare-command-hook #'dtache-eshell--maybe-create-session)
         (add-hook 'eshell-preoutput-filter-functions #'dtache--dtache-env-message-filter)
         (add-hook 'eshell-preoutput-filter-functions #'dtache--dtach-eof-message-filter))
+    (remove-hook 'eshell-prepare-command-hook #'dtache-eshell--maybe-create-session)
     (remove-hook 'eshell-preoutput-filter-functions #'dtache--dtache-env-message-filter)
     (remove-hook 'eshell-preoutput-filter-functions #'dtache--dtach-eof-message-filter)))
 

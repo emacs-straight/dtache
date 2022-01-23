@@ -30,7 +30,7 @@
 ;;;; Variables
 
 (defcustom dtache-shell-session-action
-  '(:attach dtache-tail-session
+  '(:attach dtache-shell-command-attach-session
             :view dtache-view-dwim
             :run dtache-shell-command)
   "Actions for a session created with `dtache-shell'."
@@ -53,11 +53,11 @@
 
 (defun dtache-shell-select-session ()
   "Return selected session."
-  (let* ((host-name (plist-get (dtache--host) :name))
+  (let* ((host-name (car (dtache--host)))
          (sessions
           (thread-last (dtache-get-sessions)
                        (seq-filter (lambda (it)
-                                     (string= (plist-get (dtache--session-host it) :name) host-name)))
+                                     (string= (car (dtache--session-host it)) host-name)))
                        (seq-filter (lambda (it) (eq 'active (dtache--determine-session-state it)))))))
     (dtache-completing-read sessions)))
 
@@ -140,6 +140,12 @@ This function also makes sure that the HISTFILE is disabled for local shells."
 (defun dtache-shell--save-history-on-kill ()
   "Add hook to save history when killing `shell' buffer."
   (add-hook 'kill-buffer-hook #'dtache-shell--save-history 0 t))
+
+;;;; Minor mode
+
+(let ((map dtache-shell-mode-map))
+  (define-key map (kbd "<S-return>") #'dtache-shell-send-input)
+  (define-key map (kbd "<C-return>") #'dtache-shell-attach-session))
 
 (provide 'dtache-shell)
 
