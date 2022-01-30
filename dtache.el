@@ -380,15 +380,19 @@ The session is compiled by opening its output and enabling
       (dtache--db-remove-entry session))))
 
 ;;;###autoload
-(defun dtache-kill-session (session)
-  "Send a TERM signal to SESSION."
+(defun dtache-kill-session (session &optional delete)
+  "Send a TERM signal to SESSION.
+
+Optionally DELETE the session if prefix-argument is provided."
   (interactive
-   (list (dtache-completing-read (dtache-get-sessions))))
+   (list (dtache-completing-read (dtache-get-sessions))
+         current-prefix-arg))
   (when (dtache-valid-session session)
-    (let* ((default-directory (dtache--session-directory session))
-           (pid (dtache--session-pid session)))
-      (when pid
-        (dtache--kill-processes pid)))))
+    (when-let* ((default-directory (dtache--session-directory session))
+                (pid (dtache--session-pid session)))
+      (dtache--kill-processes pid))
+    (when delete
+      (dtache--db-remove-entry session))))
 
 ;;;###autoload
 (defun dtache-view-session (session)
@@ -1116,9 +1120,9 @@ session and trigger a state transition."
   (pcase-let* ((`(,_ ,action ,file) event))
     (when (and (eq action 'deleted)
                (string= "socket" (file-name-extension file)))
-      (let* ((id (intern (file-name-base file)))
-             (session (dtache--db-get-session id))
-             (session-directory (dtache--session-directory session)))
+      (when-let* ((id (intern (file-name-base file)))
+                  (session (dtache--db-get-session id))
+                  (session-directory (dtache--session-directory session)))
 
         ;; Update session
         (dtache--session-state-transition-update session)
@@ -1141,9 +1145,10 @@ session and trigger a state transition."
 
 If event is cased by an update to the `dtache' database, re-initialize
 `dtache--sessions'."
-  (pcase-let ((`(,_descriptor ,action ,file)))
-    (when (and (string= "dtache.db" file)
-               (eq 'attribute-changed action)))
+  (pcase-let* ((`(,_descriptor ,action ,file) event)
+               (database-updated  (and (string= "dtache.db" file)
+                                       (eq 'attribute-changed action))))
+    (when database-updated)
     (dtache--db-initialize)))
 
 ;;;;; UI
