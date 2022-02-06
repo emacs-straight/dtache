@@ -34,7 +34,7 @@
 
 ;; When a session is created, dtache makes sure that Emacs is attached
 ;; to it the same time, which makes it a seamless experience for the
-;; users.  The `dtache' package internaly creates a `dtache-session'
+;; users.  The `dtache' package internally creates a `dtache-session'
 ;; for all commands.
 
 ;; [1] https://github.com/crigler/dtach
@@ -43,6 +43,7 @@
 
 ;;;; Requirements
 
+(require 'ansi-color)
 (require 'autorevert)
 (require 'notifications)
 (require 'filenotify)
@@ -108,8 +109,16 @@
             :view dtache-view-dwim
             :run dtache-shell-command)
   "Actions for a session created with `dtache-shell-command'."
-  :group 'dtache
-  :type 'plist)
+  :type 'plist
+  :group 'dtache)
+
+(defcustom dtache-shell-command-initial-input t
+  "Variable to control initial command input for `dtache-shell-command'.
+If set to a non nil value the latest entry to
+`dtache-shell-command-history' will be used as the initial input in
+`dtache-shell-command' when it is used as a command."
+  :type 'bool
+  :group 'dtache)
 
 (defcustom dtache-nonattachable-commands nil
   "A list of commands which `dtache' should consider nonattachable."
@@ -124,6 +133,11 @@
 (defcustom dtache-detach-key "C-c C-d"
   "Variable to set the keybinding for detaching."
   :type 'string
+  :group 'dtache)
+
+(defcustom dtache-log-mode-hook '(dtache--ansi-color-output)
+  "Hook for customizing `dtache-log' mode."
+  :type 'hook
   :group 'dtache)
 
 ;;;;; Public
@@ -265,10 +279,13 @@ Optionally SUPPRESS-OUTPUT if prefix-argument is provided."
                                             (abbreviate-file-name
                                              default-directory))
                           "Dtache shell command: ")
-                        nil 'dtache-shell-command-history)
+                        (when dtache-shell-command-initial-input
+                          (car dtache-shell-command-history))
+                        'dtache-shell-command-history)
     current-prefix-arg))
-  (let* ((dtache-session-origin 'shell-command)
-         (dtache-session-action dtache-shell-command-session-action)
+  (let* ((dtache-session-origin (or dtache-session-origin 'shell-command))
+         (dtache-session-action (or dtache-session-action
+                                    dtache-shell-command-session-action))
          (dtache--current-session (dtache-create-session command)))
     (dtache-start-session command suppress-output)))
 
@@ -683,11 +700,13 @@ This function uses the `notifications' library."
     (notifications-notify
      :title (pcase status
               ('success (format "Dtache finished [%s]" host))
-              ('failure (format "Dtache failed [%s]" host)))
+              ('failure (format "Dtache failed [%s]" host))
+              ('unknown (format "Dtache finished [%s]" host)))
      :body (dtache--session-command session)
      :urgency (pcase status
                 ('success 'normal)
-                ('failure 'critical)))))
+                ('failure 'critical)
+                ('unknown 'normal)))))
 
 (defun dtache-view-dwim (session)
   "View SESSION in a do what I mean fashion."
@@ -1068,6 +1087,10 @@ If SESSION is nonattachable fallback to a command that doesn't rely on tee."
   (let ((remote (file-remote-p default-directory)))
     `(,(if remote (file-remote-p default-directory 'host) (system-name)) . ,(if remote 'remote 'local))))
 
+(defun dtache--ansi-color-output ()
+  "Apply `ansi-color' on output."
+  (ansi-color-apply-on-region (point-min) (point-max)))
+
 (defun dtache--update-session-time (session &optional approximate)
   "Update SESSION's time property.
 
@@ -1247,8 +1270,7 @@ If event is cased by an update to the `dtache' database, re-initialize
 
 ;;;###autoload
 (define-derived-mode dtache-log-mode nil "Dtache Log"
-  "Major mode for dtache logs."
-  (read-only-mode t))
+  "Major mode for `dtache' logs.")
 
 (defvar dtache-tail-mode-map
   (let ((map (make-sparse-keymap)))
