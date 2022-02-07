@@ -135,7 +135,12 @@ If set to a non nil value the latest entry to
   :type 'string
   :group 'dtache)
 
-(defcustom dtache-log-mode-hook '(dtache--ansi-color-output)
+(defcustom dtache-filter-ansi-sequences t
+  "Variable to instruct `dtache' to use `ansi-filter'."
+  :type 'bool
+  :group 'dtache)
+
+(defcustom dtache-log-mode-hook '()
   "Hook for customizing `dtache-log' mode."
   :type 'hook
   :group 'dtache)
@@ -1087,9 +1092,10 @@ If SESSION is nonattachable fallback to a command that doesn't rely on tee."
   (let ((remote (file-remote-p default-directory)))
     `(,(if remote (file-remote-p default-directory 'host) (system-name)) . ,(if remote 'remote 'local))))
 
-(defun dtache--ansi-color-output ()
-  "Apply `ansi-color' on output."
-  (ansi-color-apply-on-region (point-min) (point-max)))
+(defun dtache--ansi-color-tail ()
+  "Apply `ansi-color' on tail output."
+  (let ((inhibit-read-only t))
+    (ansi-color-apply-on-region auto-revert-tail-pos (point-max))))
 
 (defun dtache--update-session-time (session &optional approximate)
   "Update SESSION's time property.
@@ -1270,7 +1276,10 @@ If event is cased by an update to the `dtache' database, re-initialize
 
 ;;;###autoload
 (define-derived-mode dtache-log-mode nil "Dtache Log"
-  "Major mode for `dtache' logs.")
+  "Major mode for `dtache' logs."
+  (when dtache-filter-ansi-sequences
+    (ansi-color-apply-on-region (point-min) (point-max)))
+  (read-only-mode t))
 
 (defvar dtache-tail-mode-map
   (let ((map (make-sparse-keymap)))
@@ -1280,7 +1289,7 @@ If event is cased by an update to the `dtache' database, re-initialize
 
 ;;;###autoload
 (define-derived-mode dtache-tail-mode auto-revert-tail-mode "Dtache Tail"
-  "Major mode for tailing dtache logs."
+  "Major mode to tail `dtache' logs."
   (setq-local auto-revert-interval dtache-tail-interval)
   (setq-local tramp-verbose 1)
   (setq-local auto-revert-remote-files t)
@@ -1289,6 +1298,9 @@ If event is cased by an update to the `dtache' database, re-initialize
   (auto-revert-set-timer)
   (setq-local auto-revert-verbose nil)
   (auto-revert-tail-mode)
+  (when dtache-filter-ansi-sequences
+    (add-hook 'after-revert-hook #'dtache--ansi-color-tail nil t)
+    (ansi-color-apply-on-region (point-min) (point-max)))
   (read-only-mode t))
 
 (provide 'dtache)
