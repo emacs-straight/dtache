@@ -1,11 +1,13 @@
 #+title: dtache.el - Detach Emacs
 #+author: Niklas Eklund
 #+language: en
+#+OPTIONS: toc:nil
 
 #+html: <a href="http://elpa.gnu.org/packages/dtache.html"><img alt="GNU ELPA" src="https://elpa.gnu.org/packages/dtache.svg"/></a>
 #+html: <a href="http://elpa.gnu.org/devel/dtache.html"><img alt="GNU-devel ELPA" src="https://elpa.gnu.org/devel/dtache.svg"/></a>
 #+html: <a href="https://melpa.org/#/dtache"><img alt="MELPA" src="https://melpa.org/packages/dtache-badge.svg"/></a>
 #+html: <a href="https://stable.melpa.org/#/dtache"><img alt="MELPA Stable" src="https://stable.melpa.org/packages/dtache-badge.svg"/></a>
+#+html: <a href="https://builds.sr.ht/~niklaseklund/dtache/commits/main/.build.yml"><img alt="Build" src="https://builds.sr.ht/~niklaseklund/dtache/commits/main/.build.yml.svg"/></a>
 
 * Announcement
 
@@ -475,4 +477,4 @@ This package wouldn't have been were it is today without these contributors.
 
 - [[https://gitlab.com/minad][Daniel Mendler]] for helping out in improving =dtache=, among other things integration with other packages such as =embark= and =consult=.
 
-- [[https://gitlab.com/ambrevar][Ambrevar]] who indirectly contributed by inspiring me with his =[[https://www.reddit.com/r/emacs/comments/6y3q4k/yes_eshell_is_my_main_shell/][yes eshell is my main shell]]. It was through that I discovered his [[https://github.com/Ambrevar/dotfiles/blob/master/.emacs.d/lisp/package-eshell-detach.el][package-eshell-detach]] which got me into the idea of using =dtach= as a base for detached shell commands.
+- [[https://gitlab.com/ambrevar][Ambrevar]] who indirectly contributed by inspiring me with his [[https://www.reddit.com/r/emacs/comments/6y3q4k/yes_eshell_is_my_main_shell/][yes eshell is my main shell]]. It was through that I discovered his [[https://github.com/Ambrevar/dotfiles/blob/master/.emacs.d/lisp/package-eshell-detach.el][package-eshell-detach]] which got me into the idea of using =dtach= as a base for detached shell commands.

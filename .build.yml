@@ -1,0 +1,10 @@
+image: guix
+packages:
+- emacs-ert-runner
+- dtach
+environment:
+  project: dtache
+tasks:
+- guix: |
+    cd $project
+    guix build --file=guix.scm
