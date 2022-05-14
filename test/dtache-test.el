@@ -81,14 +81,14 @@
                         "-c" ,(dtache--session-file session 'socket t)
                         "-z" ,dtache-shell-program
                         "-c"
-                        ,(format "{ dtache-env ls\\ -la; } 2>&1 | tee %s"
+                        ,(format "{ dtache-env terminal-data ls\\ -la; } 2>&1 | tee %s"
                                  (dtache--session-file session 'log t))))
             (expected-concat (format "%s -c %s -z %s -c %s"
                                      dtache-dtach-program
                                      (dtache--session-file session 'socket t)
                                      dtache-shell-program
                                      (shell-quote-argument
-                                      (format "{ dtache-env ls\\ -la; } 2>&1 | tee %s"
+                                      (format "{ dtache-env terminal-data ls\\ -la; } 2>&1 | tee %s"
                                               (dtache--session-file session 'log t))))))
        (should (equal expected (dtache-dtach-command session)))
        (should (equal expected-concat (dtache-dtach-command session t))))
@@ -131,20 +131,6 @@
              (session (dtache--session-create :id 's12345 :directory "/ssh:foo:/home/user/tmp/")))
     (should (string= "/ssh:foo:/home/user/tmp/s12345.log" (dtache--session-file session 'log)))
     (should (string= "/ssh:foo:/home/user/tmp/s12345.socket" (dtache--session-file session 'socket)))))
-
-(ert-deftest dtache-test-session-truncate-command ()
-  (let ((dtache-max-command-length 7))
-    (dtache--session-truncate-command
-     (dtache--session-create :command "12345678"))
-    (should (string= "123...678"
-                     (dtache--session-truncate-command
-                      (dtache--session-create :command "12345678")))))
-  (let ((dtache-max-command-length 2))
-    (dtache--session-truncate-command
-                      (dtache--session-create :command "12345678"))
-    (should (string= "1...8"
-                     (dtache--session-truncate-command
-                      (dtache--session-create :command "12345678"))))))
 
 (ert-deftest dtache-test-host ()
   (cl-letf (((symbol-function #'system-name) (lambda () "localhost")))
@@ -226,17 +212,19 @@
                                                 :working-directory "/home/user/"
                                                 :command "ls -la"
                                                 :attachable t
+                                                :env-mode 'terminal-data
                                                 :id 'foo123))
         (nonattachable-session (dtache--session-create :directory "/tmp/dtache/"
                                                 :working-directory "/home/user/"
                                                 :command "ls -la"
                                                 :attachable nil
+                                                :env-mode 'plain-text
                                                 :id 'foo123)))
     ;; With dtache-env
     (let ((dtache-env "dtache-env"))
-      (should (string= "{ dtache-env ls\\ -la; } 2>&1 | tee /tmp/dtache/foo123.log"
+      (should (string= "{ dtache-env terminal-data ls\\ -la; } 2>&1 | tee /tmp/dtache/foo123.log"
                        (dtache--dtache-command attachable-session)))
-      (should (string= "{ dtache-env ls\\ -la; } &> /tmp/dtache/foo123.log"
+      (should (string= "{ dtache-env plain-text ls\\ -la; } &> /tmp/dtache/foo123.log"
                        (dtache--dtache-command nonattachable-session))))
 
     ;; Without dtache-env
@@ -272,12 +260,12 @@
 
 (ert-deftest dtache-test-status-str ()
   (should (string= "!" (dtache--status-str (dtache--session-create :status '(failure . 127)))))
-  (should (string= " " (dtache--status-str (dtache--session-create :status '(success . 0)))))
-  (should (string= " " (dtache--status-str (dtache--session-create :status '(unknown . 0))))))
+  (should (string= "" (dtache--status-str (dtache--session-create :status '(success . 0)))))
+  (should (string= "" (dtache--status-str (dtache--session-create :status '(unknown . 0))))))
 
 (ert-deftest dtache-test-state-str ()
   (should (string= "*" (dtache--state-str (dtache--session-create :state 'active))))
-  (should (string= " " (dtache--state-str (dtache--session-create :state 'inactive)))))
+  (should (string= "" (dtache--state-str (dtache--session-create :state 'inactive)))))
 
 (ert-deftest dtache-test-working-dir-str ()
   (should

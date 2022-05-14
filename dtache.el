@@ -92,21 +92,27 @@
   :type 'string
   :group 'dtache)
 
+(defcustom dtache-env-plain-text-commands nil
+  "A list of regexps for commands to run in plain-text mode."
+  :type 'list
+  :group 'dtache)
+
 (defcustom dtache-annotation-format
-  '((:width 3 :function dtache--state-str :face dtache-state-face)
-    (:width 3 :function dtache--status-str :face dtache-failure-face)
-    (:width 10 :function dtache--host-str :face dtache-host-face)
-    (:width 40 :function dtache--working-dir-str :face dtache-working-dir-face)
-    (:width 30 :function dtache--metadata-str :face dtache-metadata-face)
-    (:width 10 :function dtache--duration-str :face dtache-duration-face)
-    (:width 8 :function dtache--size-str :face dtache-size-face)
-    (:width 12 :function dtache--creation-str :face dtache-creation-face))
+  '((:width 3 :padding 2 :function dtache--status-str :face dtache-failure-face)
+    (:width 3 :padding 4 :function dtache--state-str :face dtache-state-face)
+    (:width 10 :padding 4 :function dtache--host-str :face dtache-host-face)
+    (:width 40 :padding 4 :function dtache--working-dir-str :face dtache-working-dir-face)
+    (:width 40 :padding 4 :function dtache--metadata-str :face dtache-metadata-face)
+    (:width 10 :padding 4 :function dtache--duration-str :face dtache-duration-face)
+    (:width 8 :padding 4 :function dtache--size-str :face dtache-size-face)
+    (:width 12 :padding 4 :function dtache--creation-str :face dtache-creation-face))
   "The format of the annotations."
   :type '(repeat symbol)
   :group 'dtache)
 
-(defcustom dtache-max-command-length 90
-  "Maximum length of displayed command."
+(defcustom dtache-command-format
+  '(:width 50 :padding 4 :function dtache--command-str)
+  "The format for displaying the command."
   :type 'integer
   :group 'dtache)
 
@@ -156,6 +162,13 @@ If set to a non nil value the latest entry to
   :type 'hook
   :group 'dtache)
 
+(defcustom dtache-shell-mode-filter-functions
+  '(dtache--dtache-env-message-filter
+    dtache--dtach-eof-message-filter)
+  "A list of filter functions that are run in `dtache-shell-mode'."
+  :type 'list
+  :group 'dtache)
+
 ;;;;; Public
 
 (defvar dtache-enabled nil)
@@ -176,7 +189,7 @@ Valid values are: create, new and attach")
 (defvar dtache-metadata-annotators-alist nil
   "An alist of annotators for metadata.")
 
-(defconst dtache-session-version "0.6.0"
+(defconst dtache-session-version "0.6.1"
   "The version of `dtache-session'.
 This version is encoded as [package-version].[revision].")
 
@@ -255,6 +268,8 @@ This version is encoded as [package-version].[revision].")
 (make-variable-buffer-local 'dtache--buffer-session)
 (defvar dtache--session-candidates nil
   "An alist of session candidates.")
+(defvar dtache--annotation-widths nil
+  "An alist of widths to use for annotation.")
 
 (defconst dtache--shell-command-buffer "*Dtache Shell Command*"
   "Name of the `dtache-shell-command' buffer.")
@@ -277,6 +292,7 @@ This version is encoded as [package-version].[revision].")
   (metadata nil :read-only t)
   (host nil :read-only t)
   (attachable nil :read-only t)
+  (env-mode nil :read-only t)
   (action nil :read-only t)
   (time nil)
   (status nil)
@@ -325,7 +341,7 @@ Optionally SUPPRESS-OUTPUT if prefix-argument is provided."
    (list (dtache-completing-read (dtache-get-sessions))))
   (when (dtache-valid-session session)
     (if (eq 'active (dtache--session-state session))
-        (dtache-tail-session session)
+        (dtache-attach-session session)
       (if-let ((view-fun (plist-get (dtache--session-action session) :view)))
           (funcall view-fun session)
         (dtache-view-dwim session)))))
@@ -397,6 +413,9 @@ The session is compiled by opening its output and enabling
   (when (dtache-valid-session session)
     (with-temp-buffer
       (insert (dtache--session-output session))
+      (when (eq 'terminal-data (dtache--session-env-mode session))
+        ;; Enable `dtache-log-mode' to parse ansi-escape sequences
+        (dtache-log-mode))
       (kill-new (buffer-string)))))
 
 ;;;###autoload
@@ -583,6 +602,7 @@ nil before closing."
                                   :size 0
                                   :directory (if dtache-local-session dtache-session-directory
                                                (concat (file-remote-p default-directory) dtache-session-directory))
+                                  :env-mode (dtache--env-mode command)
                                   :host (dtache--host)
                                   :metadata (dtache-metadata)
                                   :state 'unknown)))
@@ -621,16 +641,26 @@ Optionally SUPPRESS-OUTPUT."
 
 (defun dtache-session-candidates (sessions)
   "Return an alist of SESSIONS candidates."
-  (setq dtache--session-candidates
-        (thread-last sessions
-                     (seq-map (lambda (it)
-                                `(,(dtache--session-truncate-command it)
-                                  . ,it)))
-                     (dtache--session-deduplicate)
-                     (seq-map (lambda (it)
-                                ;; Max width is the ... padding + width of identifier
-                                (setcar it (truncate-string-to-width (car it) (+ 3 6 dtache-max-command-length) 0 ?\s))
-                                it)))))
+  (when sessions
+    (setq dtache--annotation-widths
+          (dtache--annotation-widths sessions dtache-annotation-format))
+    (let ((command-length
+           (thread-last sessions
+                        (seq-map #'dtache--session-command)
+                        (seq-map #'length)
+                        (seq-max)
+                        (min (plist-get dtache-command-format ':width)))))
+      (let ((command-fun (plist-get dtache-command-format ':function)))
+        (setq dtache--session-candidates
+              (thread-last sessions
+                           (seq-map (lambda (it)
+                                      `(,(apply command-fun `(,it ,command-length))
+                                        . ,it)))
+                           (dtache--session-deduplicate)
+                           (seq-map (lambda (it)
+                                      `(,(concat (car it)
+                                                 (make-string (plist-get dtache-command-format :padding) ?\s))
+                                        . ,(cdr it))))))))))
 
 (defun dtache-session-annotation (item)
   "Associate ITEM to a session and return ts annotation."
@@ -638,14 +668,18 @@ Optionally SUPPRESS-OUTPUT."
     (mapconcat
      #'identity
      (cl-loop for annotation in dtache-annotation-format
-              collect (let ((str (funcall (plist-get annotation :function) session)))
-                        (truncate-string-to-width
-                         (propertize str 'face (plist-get annotation :face))
-                         (plist-get annotation :width)
-                         0 ?\s)))
-     "   ")))
+              collect (let ((str (funcall (plist-get annotation :function) session))
+                            (width (alist-get (plist-get annotation :function) dtache--annotation-widths)))
+                        (when (> width 0)
+                          (concat
+                           (truncate-string-to-width
+                            (propertize str 'face (plist-get annotation :face))
+                            width
+                            0 ?\s)
+                           (make-string (plist-get annotation :padding) ?\s)
+                           ))))
+     "")))
 
-;;;###autoload
 (defun dtache-setup ()
   "Initialize `dtache'."
 
@@ -683,10 +717,7 @@ Optionally SUPPRESS-OUTPUT."
                  (seq-filter (lambda (it) (eq 'active (dtache--session-state it))))
                  (seq-map #'dtache--session-directory)
                  (seq-uniq)
-                 (seq-do #'dtache--watch-session-directory))
-
-    ;; Other
-    (add-hook 'shell-mode-hook #'dtache-shell-mode)))
+                 (seq-do #'dtache--watch-session-directory))))
 
 (defun dtache-valid-session (session)
   "Ensure that SESSION is valid.
@@ -753,7 +784,8 @@ This function uses the `notifications' library."
           (t (message "Dtache session is in an unexpected state.")))))
 
 (defun dtache-get-sessions ()
-  "Return validitated sessions."
+  "Return validated sessions."
+  (dtache-setup)
   (dtache--validate-unknown-sessions)
   (dtache--db-get-sessions))
 
@@ -879,16 +911,6 @@ Optionally CONCAT the command return command into a string."
         (buffer-string))
       "\n" t))))
 
-(defun dtache--session-truncate-command (session)
-  "Return a truncated string representation of SESSION's command."
-  (let ((command (dtache--session-command session)))
-    (if (<= (length command) dtache-max-command-length)
-        command
-      (concat
-       (substring command 0 (/ dtache-max-command-length 2))
-       "..."
-       (substring command (- (length command) (/ dtache-max-command-length 2)) (length command))))))
-
 (defun dtache--determine-session-state (session)
   "Return t if SESSION is active."
   (if (file-exists-p
@@ -927,7 +949,14 @@ Optionally CONCAT the command return command into a string."
 (defun dtache--session-deduplicate (sessions)
   "Make car of SESSIONS unique by adding an identifier to it."
   (let* ((ht (make-hash-table :test #'equal :size (length sessions)))
-         (identifier-width 6)
+         (occurences
+          (thread-last sessions
+                       (seq-group-by #'car)
+                       (seq-map (lambda (it) (seq-length (cdr it))))
+                       (seq-max)))
+         (identifier-width (if (> occurences 1)
+                               (+ (length (number-to-string occurences)) 3)
+                             0))
          (reverse-sessions (seq-reverse sessions)))
     (dolist (session reverse-sessions)
       (if-let (count (gethash (car session) ht))
@@ -1125,9 +1154,19 @@ If SESSION is nonattachable fallback to a command that doesn't rely on tee."
             (format "&> %s" log)))
          (env (if dtache-env dtache-env (format "%s -c" dtache-shell-program)))
          (command
-          (shell-quote-argument
-           (dtache--session-command session))))
+          (if dtache-env
+              (concat (format "%s " (dtache--session-env-mode session))
+                      (shell-quote-argument (dtache--session-command session)))
+            (shell-quote-argument (dtache--session-command session)))))
     (format "%s %s %s; %s %s" begin-shell-group env command end-shell-group redirect)))
+
+(defun dtache--env-mode (command)
+  "Return mode to run in `dtache-env' based on COMMAND."
+  (if (seq-find (lambda (regexp)
+                  (string-match-p regexp command))
+                dtache-env-plain-text-commands)
+      'plain-text
+    'terminal-data))
 
 (defun dtache--host ()
   "Return a cons with (host . type)."
@@ -1222,7 +1261,29 @@ If event is cased by an update to the `dtache' database, re-initialize
     (when database-updated)
     (dtache--db-initialize)))
 
+(defun dtache--annotation-widths (sessions annotation-format)
+  "Return widths for ANNOTATION-FORMAT based on SESSIONS."
+  (seq-map (lambda (it) (dtache--annotation-width sessions it)) annotation-format))
+
+(defun dtache--annotation-width (sessions annotation)
+  "Determine width for ANNOTATION based on SESSIONS."
+  (let ((annotation-fun (plist-get annotation ':function))
+        (width (plist-get annotation ':width)))
+    `(,annotation-fun .
+                      ,(thread-last sessions
+                                    (seq-map annotation-fun)
+                                    (seq-map #'length)
+                                    (seq-max)
+                                    (min width)))))
+
 ;;;;; UI
+
+(defun dtache--command-str (session max-length)
+  "Return SESSION's command as a string restrict it to MAX-LENGTH."
+  (let ((command (dtache--session-command session)))
+    (if (<= (length command) max-length)
+        command
+      (concat (substring (dtache--session-command session) 0 (- max-length 3)) "..."))))
 
 (defun dtache--metadata-str (session)
   "Return SESSION's metadata as a string."
@@ -1232,7 +1293,7 @@ If event is cased by an update to the `dtache' database, re-initialize
                 (seq-map
                  (lambda (it)
                    (concat (symbol-name (car it)) ": " (cdr it)))))
-   " "))
+   ""))
 
 (defun dtache--duration-str (session)
   "Return SESSION's duration time."
@@ -1266,14 +1327,14 @@ If event is cased by an update to the `dtache' database, re-initialize
   "Return string if SESSION has failed."
   (pcase (car (dtache--session-status session))
     ('failure "!")
-    ('success " ")
-    ('unknown " ")))
+    ('success "")
+    ('unknown "")))
 
 (defun dtache--state-str (session)
   "Return string based on SESSION state."
   (if (eq 'active (dtache--session-state session))
       "*"
-    " "))
+    ""))
 
 (defun dtache--working-dir-str (session)
   "Return working directory of SESSION."
@@ -1302,11 +1363,10 @@ If event is cased by an update to the `dtache' database, re-initialize
   :keymap (let ((map (make-sparse-keymap)))
             map)
   (if dtache-shell-mode
-      (progn
-        (add-hook 'comint-preoutput-filter-functions #'dtache--dtache-env-message-filter 0 t)
-        (add-hook 'comint-preoutput-filter-functions #'dtache--dtach-eof-message-filter 0 t))
-    (remove-hook 'comint-preoutput-filter-functions #'dtache--dtache-env-message-filter t)
-    (remove-hook 'comint-preoutput-filter-functions #'dtache--dtach-eof-message-filter t)))
+      (dolist (filter dtache-shell-mode-filter-functions)
+        (add-hook 'comint-preoutput-filter-functions filter 0 t))
+     (dolist (filter dtache-shell-mode-filter-functions)
+        (remove-hook 'comint-preoutput-filter-functions filter t))))
 
 ;;;; Major modes
 

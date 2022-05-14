@@ -63,8 +63,10 @@ A minimal configuration for `dtache`.
 
 ``` emacs-lisp
 (use-package dtache
-  :hook (after-init . dtache-setup)
-  :bind (([remap async-shell-command] . dtache-shell-command)))
+  :defer t
+  :hook ((shell-mode . dtache-shell-mode))
+  :bind (([remap async-shell-command] . dtache-shell-command))
+  :custom ((dtache-show-output-on-attach t)))
 ```
 
 # Commands
@@ -127,10 +129,11 @@ A `use-package` configuration of the `dtache-shell` extension, which provides th
 
 ``` emacs-lisp
 (use-package dtache-shell
-  :after dtache
-  :config
-  (dtache-shell-setup)
-  (setq dtache-shell-history-file "~/.bash_history"))
+  :after shell
+  :init
+  (advice-add 'shell :around #'dtache-shell-override-history)
+  (add-hook 'shell-mode-hook #'dtache-shell-save-history-on-kill)
+  :custom (dtache-shell-history-file "~/.bash_history"))
 ```
 
 A minor mode named `dtache-shell-mode` is provided, and will be enabled in `shell`. The commands that are implemented are:
@@ -147,9 +150,8 @@ A `use-package` configuration of the `dtache-eshell` extension, which provides t
 
 ``` emacs-lisp
 (use-package dtache-eshell
-  :after (eshell dtache)
-  :config
-  (dtache-eshell-setup))
+  :defer t
+  :hook ((eshell-mode . dtache-eshell-mode)))
 ```
 
 A minor mode named `dtache-eshell-mode` is provided, and will be enabled in `eshell`. The commands that are implemented are:
@@ -167,10 +169,12 @@ In this [blog post](https://niklaseklund.gitlab.io/blog/posts/dtache_eshell/) th
 A `use-package` configuration of the `dtache-compile` extension, which provides the integration with `compile`.
 
 ``` emacs-lisp
-    (use-package dtache-compile
-      :hook (after-init . dtache-compile-setup)
-      :bind (([remap compile] . dtache-compile)
-             ([remap recompile] . dtache-compile-recompile)))
+(use-package dtache-compile
+  :defer t
+  :bind (([remap compile] . dtache-compile)
+         ([remap recompile] . dtache-compile-recompile))
+  :hook ((compilation-start . dtache-compile-start)
+         (compilation-shell-minor-mode . dtache-shell-mode)))
 ```
 
 The package implements the commands `dtache-compile` and `dtache-compile-recompile`, which are thin wrappers around the original `compile` and `recompile` commands. The users should be able to use the former as replacements for the latter without noticing any difference except from the possibility to `detach`.
@@ -182,14 +186,14 @@ A `use-package` configuration of the `dtache-org` extension, which provides the 
 
 ``` emacs-lisp
 (use-package dtache-org
-  :after (dtache org)
-  :config
-  (dtache-org-setup))
+  :after ob
+  :init
+  (advice-add #'org-babel-sh-evaluate :around #'dtache-org-babel-sh))
 ```
 
 The package implements an additional header argument for `ob-shell`. The header argument is `:dtache t`. When provided it will enable the code inside a src block to be run with `dtache`. Since org is not providing any live updates on the output the session is created with `dtache-sesion-mode` set to `create`. This means that if you want to access the output of the session you do that the same way you would for any other type of session. The `dtache-org` works both with and without the `:session` header argument.
 
-``` emacs-lisp
+```
 #+begin_src sh :dtache t
     cd ~/code
     ls -la
@@ -238,7 +242,7 @@ The package provides the following customizable variables.
 | dtache-timer-configuration         | Configuration of the timer that runs on remote hosts                      |
 | dtache-env                         | Name or path to the `dtache-env` script                                   |
 | dtache-annotation-format           | A list of annotations that should be present in completion                |
-| dtache-max-command-length          | How many characters should be used when displaying a command              |
+| dtache-command-format              | A configuration for displaying a session command                          |
 | dtache-tail-interval               | How often `dtache` should refresh the output when tailing                 |
 | dtache-nonattachable-commands      | A list of commands that should be considered nonattachable                |
 | dtache-notification-function       | Specifies which function to issue notifications with                      |
@@ -325,12 +329,21 @@ Next add the annotation function to the `dtache-metadata-annotators-alist` toget
 To be able to both attach to a dtach session as well as logging its output `dtache` relies on the usage of `tee`. However it is possible that the user tries to run a command which involves a program that doesn't integrate well with tee. In those situations the output could be delayed until the session ends, which is not preferable.
 
 For these situations `dtache` provides the `dtache-nonattachable-commands` variable. This is a list of regular expressions. Any command that matches any of the strings will be getting the property `attachable` set to false.
-
 ``` emacs-lisp
 (setq dtache-nonattachable-commands '("^ls"))
 ```
 
 Here a command beginning with `ls` would from now on be considered nonattachable.
+
+## Colors in sessions
+
+Dtache needs to use a trick to get programs programs such as `git` or `grep` to show color in their outputs. This is because these commands only use colors and ansi sequences if they are being run in a terminal, as opposed to a pipe. The `dtache-env` therefore has two different modes. The mode can be either `plain-text` or `terminal-data`, the latter is now the default. The `dtache-env` program then uses the `script` command to make programs run in `dtache` think they are inside of a full-featured terminal, and therefore can log their raw terminal data.
+
+The drawback is that there can be commands which generates escape sequences that `dtache` supports and will therefore mess up the output for some commands. If you detect such an incompatible command you can add a regexp that matches that command to the list `dtache-env-plain-text-commands`. By doing so `dtache` will instruct `dtache-env` to run those commands in plain-text mode.
+
+``` emacs-lisp
+(setq dtache-env-plain-text-commands '(".*"))
+```
 
 # Tips & Tricks
 
@@ -489,7 +502,7 @@ This package wouldn't have been were it is today without these contributors.
 
 ## Idea contributors
 
-- [rosetail](https://gitlab.com/rosetail) for all great ideas and improvements to the package.
+- [rosetail](https://gitlab.com/rosetail) for all the great ideas and improvements to the package. Without those contributions `dtache` would be a less sophisticated package.
 - [Troy de Freitas](https://gitlab.com/ntdef) for solving the problem of getting `dtache` to work with `filenotify` on macOS.
 - [Daniel Mendler](https://gitlab.com/minad) for helping out in improving `dtache`, among other things integration with other packages such as `embark` and `consult`.
 - [Ambrevar](https://gitlab.com/ambrevar) who indirectly contributed by inspiring me with his [yes eshell is my main shell](https://www.reddit.com/r/emacs/comments/6y3q4k/yes_eshell_is_my_main_shell/). It was through that I discovered his [package-eshell-detach](https://github.com/Ambrevar/dotfiles/blob/master/.emacs.d/lisp/package-eshell-detach.el) which got me into the idea of using `dtach` as a base for detached shell commands.
