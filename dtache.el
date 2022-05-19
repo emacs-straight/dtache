@@ -77,7 +77,7 @@
   :type 'string
   :group 'dtache)
 
-(defcustom dtache-show-output-on-attach t
+(defcustom dtache-show-output-on-attach nil
   "If set to t show the session output when attaching to it."
   :type 'bool
   :group 'dtache)
@@ -111,7 +111,7 @@
   :group 'dtache)
 
 (defcustom dtache-command-format
-  '(:width 50 :padding 4 :function dtache--command-str)
+  '(:width 90 :padding 4 :function dtache-command-str)
   "The format for displaying the command."
   :type 'integer
   :group 'dtache)
@@ -119,6 +119,11 @@
 (defcustom dtache-tail-interval 2
   "Interval in seconds for the update rate when tailing a session."
   :type 'integer
+  :group 'dtache)
+
+(defcustom dtache-open-active-session-action 'attach
+  "How to open an active session, allowed values are `attach' and `tail'."
+  :type 'symbol
   :group 'dtache)
 
 (defcustom dtache-shell-command-session-action
@@ -192,21 +197,6 @@ Valid values are: create, new and attach")
 (defconst dtache-session-version "0.6.1"
   "The version of `dtache-session'.
 This version is encoded as [package-version].[revision].")
-
-(defvar dtache-action-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map "a" #'dtache-attach-session)
-    (define-key map "c" #'dtache-compile-session)
-    (define-key map "d" #'dtache-delete-session)
-    (define-key map "i" #'dtache-insert-session-command)
-    (define-key map "k" #'dtache-kill-session)
-    (define-key map "r" #'dtache-rerun-session)
-    (define-key map "t" #'dtache-tail-session)
-    (define-key map "v" #'dtache-view-session)
-    (define-key map "w" #'dtache-copy-session-command)
-    (define-key map "W" #'dtache-copy-session)
-    (define-key map "=" #'dtache-diff-session)
-    map))
 
 ;;;;; Faces
 
@@ -341,7 +331,10 @@ Optionally SUPPRESS-OUTPUT if prefix-argument is provided."
    (list (dtache-completing-read (dtache-get-sessions))))
   (when (dtache-valid-session session)
     (if (eq 'active (dtache--session-state session))
-        (dtache-attach-session session)
+        (pcase dtache-open-active-session-action
+          ('attach (dtache-attach-session session))
+          ('tail (dtache-tail-session session))
+          (_ (message "`dtache-open-active-session-action' has an incorrect value")))
       (if-let ((view-fun (plist-get (dtache--session-action session) :view)))
           (funcall view-fun session)
         (dtache-view-dwim session)))))
@@ -513,11 +506,17 @@ Optionally DELETE the session if prefix-argument is provided."
       (with-current-buffer (get-buffer-create buffer1)
         (erase-buffer)
         (insert (dtache--session-header session1))
-        (insert (dtache--session-output session1)))
+        (insert (dtache--session-output session1))
+        (when (eq 'terminal-data (dtache--session-env-mode session1))
+          ;; Enable `dtache-log-mode' to parse ansi-escape sequences
+          (dtache-log-mode)))
       (with-current-buffer (get-buffer-create buffer2)
         (erase-buffer)
         (insert (dtache--session-header session2))
-        (insert (dtache--session-output session2)))
+        (insert (dtache--session-output session2))
+        (when (eq 'terminal-data (dtache--session-env-mode session2))
+          ;; Enable `dtache-log-mode' to parse ansi-escape sequences
+          (dtache-log-mode)))
       (ediff-buffers buffer1 buffer2))))
 
 ;;;###autoload
@@ -610,6 +609,7 @@ nil before closing."
      (dtache--watch-session-directory (dtache--session-directory session))
      session)))
 
+;;;###autoload
 (defun dtache-start-session (command &optional suppress-output)
   "Start a `dtache' session running COMMAND.
 
@@ -680,8 +680,9 @@ Optionally SUPPRESS-OUTPUT."
                            ))))
      "")))
 
-(defun dtache-setup ()
-  "Initialize `dtache'."
+;;;###autoload
+(defun dtache-initialize-sessions ()
+  "Initialize `dtache' sessions from the database."
 
   ;; Initialize sessions
   (unless dtache--sessions-initialized
@@ -785,7 +786,7 @@ This function uses the `notifications' library."
 
 (defun dtache-get-sessions ()
   "Return validated sessions."
-  (dtache-setup)
+  (dtache-initialize-sessions)
   (dtache--validate-unknown-sessions)
   (dtache--db-get-sessions))
 
@@ -891,6 +892,13 @@ Optionally CONCAT the command return command into a string."
                          (complete-with-action action candidates string predicate))))
          (cand (completing-read "Select session: " collection nil t)))
     (dtache--decode-session cand)))
+
+(defun dtache-command-str (session max-length)
+  "Return SESSION's command as a string restrict it to MAX-LENGTH."
+  (let ((command (dtache--session-command session)))
+    (if (<= (length command) max-length)
+        command
+      (concat (substring (dtache--session-command session) 0 (- max-length 3)) "..."))))
 
 ;;;; Support functions
 
@@ -1277,13 +1285,6 @@ If event is cased by an update to the `dtache' database, re-initialize
                                     (min width)))))
 
 ;;;;; UI
-
-(defun dtache--command-str (session max-length)
-  "Return SESSION's command as a string restrict it to MAX-LENGTH."
-  (let ((command (dtache--session-command session)))
-    (if (<= (length command) max-length)
-        command
-      (concat (substring (dtache--session-command session) 0 (- max-length 3)) "..."))))
 
 (defun dtache--metadata-str (session)
   "Return SESSION's metadata as a string."
