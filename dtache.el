@@ -1,6 +1,13 @@
-;;; detached-dired.el --- Detached integration for dired -*- lexical-binding: t -*-
+;;; dtache.el --- A package to launch, and manage, dtache processes -*- lexical-binding: t -*-
 
-;; Copyright (C) 2022  Free Software Foundation, Inc.
+;; Copyright (C) 2020-2022  Free Software Foundation, Inc.
+
+;; Author: Niklas Eklund <niklas.eklund@posteo.net>
+;; Maintainer: Niklas Eklund <niklas.eklund@posteo.net>
+;; URL: https://sr.ht/~niklaseklund/dtache.el/
+;; Version: 0.7
+;; Package-Requires: ((emacs "27.1") (detached "0.7"))
+;; Keywords: convenience processes
 
 ;; This file is part of GNU Emacs.
 
@@ -19,27 +26,15 @@
 
 ;;; Commentary:
 
-;; This package integrates `detached' with `dired'.
+;; The dtache package has been renamed to detached.el, please migrate
+;; to that instead.
 
 ;;; Code:
 
 ;;;; Requirements
 
-(require 'dired)
+
+(provide 'dtache)
+
+;;; dtache.el ends here
 (require 'detached)
-
-;;;; Functions
-
-;;;###autoload
-(defun detached-dired-do-shell-command (dired-do-shell-command &rest args)
-  "Ensure `detached' is used before running DIRED-DO-SHELL-COMMAND with ARGS."
-  (cl-letf* ((detached-session-origin 'dired)
-             ((symbol-function #'dired-run-shell-command)
-              (lambda (command)
-                (detached-start-session command)
-                nil)))
-    (apply dired-do-shell-command args)))
-
-(provide 'detached-dired)
-
-;;; detached-dired.el ends here
