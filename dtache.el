@@ -33,8 +33,8 @@
 
 ;;;; Requirements
 
+(require 'detached)
 
 (provide 'dtache)
 
 ;;; dtache.el ends here
-(require 'detached)
